@@ -1,6 +1,9 @@
 # Matchuhr
 a gameclock for sport. Designed for floorball (swiss unihockey rules)
 
+## Warning
+This is not fully tested. Wrote from a apprentice. Usage at your own risk.
+
 ## Display
 Gametime			4x7-Seg <br>
 Goals (Points)		LCD <br>
