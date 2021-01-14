@@ -45,6 +45,8 @@ static FILE lcdstdout = FDEV_SETUP_STREAM(lcdPuts, NULL, _FDEV_SETUP_WRITE);
  */
 void elobLcd_init(void)
 {
+	DDRL = 0xFF; //output
+	
 	_delay_ms(22);
 	
 	stdout = &lcdstdout;
