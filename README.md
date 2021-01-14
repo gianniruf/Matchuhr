@@ -1,8 +1,6 @@
 # Matchuhr
 a gameclock for sport. Designed for floorball (swiss unihockey rules)
 
-# NOT READY TO USE YET!!!
-
 ## Display
 Gametime			4x7-Seg <br>
 Goals (Points)		LCD <br>
@@ -28,3 +26,7 @@ ts4			2'-home <br>
 ts5			5'-guest <br>
 ts6			5'-home <br>
 ts7			start Timeout <br>
+
+## Envirement
+Hardware: ELOB (https://www.s-tec.ch/produkte/zlv-mint-schulungsboard) with ATMega2560
+Recomended Softwareenvirement: AtmelStudio 7.0
