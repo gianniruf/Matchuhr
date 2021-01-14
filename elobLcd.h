@@ -19,7 +19,17 @@
 void elobLcd_init(void);
 
 //***Grundfunktionen
-void elobLcd_zeichen(unsigned char);	//gewünschtes Zeichen
+
+/**
+ * Gibt ein Zeichen aus
+ * @param	gewünschtes Zeichen in char (mit 'X')
+ */
+void elobLcd_zeichen(unsigned char);
+
+/**
+ * Führt 8-Bit/4-Bit befehl aus
+ * @param	Befehl 8Bit
+ */
 void elobLcd_instruktion(unsigned char);	//befehl
 
 //Kontrollfunktionen
@@ -36,6 +46,11 @@ void elobLcd_display_L(void);
 void elobLcd_cursor_R(void);
 void elobLcd_cursor_L(void);
 void elobLcd_cursor_2Line(void);
+/**
+ * Setzt Cursor zu bestimmter Position
+ * @param:	Linie: 1..2
+ * @param:	Position: 0..15
+ */
 void elobLcd_cursor_toXY(unsigned char, unsigned char);	//Linie, Position
 
 #endif /* ELOBLCD_H_ */
