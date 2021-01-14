@@ -5,27 +5,26 @@ a gameclock for sport. Designed for floorball (swiss unihockey rules)
 
 ## Display
 Gametime			4x7-Seg <br>
-Goals (Points)		LCD
-Penalty-Time		LCD (one for both Teams)
-Period				LCD
-Timeinformation		RGB
+Goals (Points)		LCD <br>
+Penalty-Time		LCD (one for both Teams) <br>
+Period				LCD <br>
+Timeinformation		RGB <br>
 
 ## Usage
 ### RGB
-green		time is running
-red			time is stopped
-blue		pause
-white		Timeout (30s)
-orange		Shootout
-Pink		End of game
+green		time is running <br>
+red			time is stopped <br>
+blue		pause <br>
+white		Timeout (30s) <br>
+orange		Shootout <br>
+Pink		End of game <br>
 
 ### Buttons
-ts0			start/stop
-ts1			goals guest
-ts2			goals home
-ts3			2'-guest
-ts4			2'-home
-ts5			5'-guest
-ts6			5'-home
-ts7			start Timeout
-
+ts0			start/stop <br>
+ts1			goals guest <br>
+ts2			goals home <br>
+ts3			2'-guest <br>
+ts4			2'-home <br>
+ts5			5'-guest <br>
+ts6			5'-home <br>
+ts7			start Timeout <br>
