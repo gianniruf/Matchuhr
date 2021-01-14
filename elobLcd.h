@@ -23,7 +23,7 @@ void elobLcd_zeichen(unsigned char);	//gewünschtes Zeichen
 void elobLcd_instruktion(unsigned char);	//befehl
 
 //Kontrollfunktionen
-void elobLcd_cursorHome(void);
+void elobLcd_cursor_home(void);
 void elobLcd_clearDisplay(void);
 void elobLcd_display_on(void);
 void elobLcd_display_off(void);

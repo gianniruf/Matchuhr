@@ -1,7 +1,7 @@
 /*
- * Matchuhr.c
+ * Matchuhr_v2.c
  *
- * Created: 06.10.2019 11:36:14
+ * Created: 21.12.2019 12:24:53
  * Author : rufg
  */ 
 
@@ -21,37 +21,43 @@
 #define zeitStrafe2		200		//2min
 #define zeitStrafe5		500		//5min
 
+#define delay 1001
+
 //***Taster***
 #define tstStartStopp	(pinj.flanke_pos & (1<<0))
-#define tstTorH			(pinj.flanke_pos & (1<<2))
-#define tstTorG			(pinj.flanke_pos & (1<<1))
-#define tstStrafe2H		(pinj.flanke_pos & (1<<4))
-#define tstStrafe2G		(pinj.flanke_pos & (1<<3))
-#define tstStrafe5H		(pinj.flanke_pos & (1<<6))
-#define tstStrafe5G		(pinj.flanke_pos & (1<<5))
-#define tstTimeout		(pinj.flanke_pos & (1<<7))
+#define tstTorH_pos			(pinj.flanke_pos & (1<<2))
+#define tstTorG__pos		(pinj.flanke_pos & (1<<1))
+#define tstStrafe2H_pos		(pinj.flanke_pos & (1<<4))
+#define tstStrafe2G_pos		(pinj.flanke_pos & (1<<3))
+#define tstStrafe5H_pos		(pinj.flanke_pos & (1<<6))
+#define tstStrafe5G_pos		(pinj.flanke_pos & (1<<5))
+#define tstTimeout_pos		(pinj.flanke_pos & (1<<7))
+#define tstTorH_neg			(pinj.flanke_neg & (1<<2))
+#define tstTorG_neg			(pinj.flanke_neg & (1<<1))
+#define tstStrafe2H_neg		(pinj.flanke_neg & (1<<4))
+#define tstStrafe2G_neg		(pinj.flanke_neg & (1<<3))
+#define tstStrafe5H_neg		(pinj.flanke_neg & (1<<6))
+#define tstStrafe5G_neg		(pinj.flanke_neg & (1<<5))
+#define tstTimeout_neg		(pinj.flanke_neg & (1<<7))
 
 //***rgb***
-#define rgbDunkel		(PORTB = 0)
-#define rgbRot			(PORTB = (1<<5))
-#define rgbOrange		(PORTB = (0b11<<5))
-#define rgbGruen		(PORTB = (1<<6))
-#define rgbTuerkis		(PORTB = (0b111<<5))
-#define rgbBlau			(PORTB = (1<<7))
-#define rgbViolett		(PORTB = (0b101<<5))
+#define rgbAusgabe		(5)
 
 //***Diverses***
 #define audHorn_on		(PORTD |= (1<<7))
 #define audHorn_off		(PORTD &= ~(1<<7))
-#define AUD_HORN_LANG_SP	1000	//1sek
-#define AUD_HORN_KURZ_SP	500		//0.5sek
+#define AUD_HORN_LANG_SP	100	//1sek
+#define AUD_HORN_KURZ_SP	50	//0.5sek
 
 
-//***ENUMS***
-enum abschnitt {ABSCH1 = 1, ABSCH2, ABSCH3, ABSCHOT, PAUSE1, PAUSE2, PAUSEOT, OT, PENALTYS, TIMEOUT, ENDE};
-enum farben {DUNKEL = 0, ROT, ORANGE, GRUEN, TUERKIS, BLAU, VIOLETT};
+//***FUNKTIONSPROTOTYPEN***
+void pin_init(void);
+void timer_init(void);
+void flankenerkennung(void);
+int zeitberechnung(int zeit_old);
+void tasterauswertung(int* toreH, int* toreG, int* zeitStrafeH, int* zeitStrafeG, unsigned char drittel, unsigned char* anzPen);
 
-//***STRUCKTUREN***
+//***STRUKTUREN
 struct flanken
 {
 	unsigned char state;
@@ -61,50 +67,29 @@ struct flanken
 };
 struct flanken pinj;
 
+//***ENUMS***
+enum abschnitt {ABSCH1 = 1, ABSCH2, ABSCH3, PAUSE1, PAUSE2, PAUSEOT, OT, PENALTYS, TIMEOUT, ENDE};
+enum farben {DUNKEL = 0, ROT, GRUEN, ORANGE, BLAU, VIOLET, TUERKIS, WEISS};
+
 //***VARIABLEN GLOBAL***
-unsigned int zeitSpielzeit = zeitAbschnitt;	//wird ausgegeben
-unsigned int zeitSpielzeit_old;	//zwischenspeicher (z.B. für Timeout)
-unsigned char state = ABSCH1;	//Spielabschnitt
-unsigned int anzTimerInterrupts_pv;	//=anz. ms
-unsigned char eineSekunde;	//1 = eine Sekunde
-unsigned char startStopp = 0;	//1 = zeit läuft
-unsigned int toreH = 0;
-unsigned int toreG = 0;
-unsigned char neuerAbschnitt = 1;	//1 = neuer Abschnitt
-unsigned char tasterblock = 0;	//>1 = blockiert
-unsigned int zeitStrafeH = 0;
-unsigned int zeitStrafeG = 0;
-unsigned char strafe2H_aktiv = 0;	//1 = Strafe läuft
-unsigned char strafe2G_aktiv = 0;
-unsigned char strafe5H_aktiv = 0;
-unsigned char strafe5G_aktiv = 0;
-unsigned char penaltys[15];
-unsigned char absch;
-unsigned int audHorn_pv;	//0 = aus
-
-
-//***FUNKTIONSPROTOTYPEN***
-void pin_init(void);
-void timer_init(void);
-void rgb(unsigned char Farbe);
-int zeitberechnung(unsigned int zeit);
-void penaltyschiessen(void);
-void flankenerkennung(void);
+unsigned int anzTimerInterrupts_pv;
+unsigned char eineSekunde = 0;
+unsigned char zehnmilisekunde = 0;
+unsigned int horn_pv = 0;
+unsigned int spielzeit;		//Aktuelle Zeit
+unsigned char endeAbschnitt = 0;
 
 //***INTERRUPTS***
 ISR(TIMER2_COMPA_vect)
 {
 	anzTimerInterrupts_pv++;
-	if (anzTimerInterrupts_pv > 1000)	//1s
+	if (anzTimerInterrupts_pv > 1000)
 	{
 		anzTimerInterrupts_pv = 0;
 		eineSekunde = 1;
 	}
-	if (tasterblock)
-		tasterblock--;
-	if (audHorn_pv)
-		audHorn_pv--;
-	ausgabe7seg(zeitSpielzeit, 0, 1, 0);
+	if(!(anzTimerInterrupts_pv % 1))
+		zehnmilisekunde = 1;
 }
 
 /**
@@ -112,12 +97,7 @@ ISR(TIMER2_COMPA_vect)
  */
 int main(void)
 {
-    //***Variablen Lokal***
-	unsigned char rgbFarbe;
-	unsigned char torstand_old;
-	unsigned char state_old;
-	
-	//***Init***
+	//***Initialisierung***
 	pin_init();
 	elobLcd_init();
 	elobLcd_cursor_off();
@@ -127,309 +107,308 @@ int main(void)
 	
 	lcdBacklight_on;
 	
+	//***Variablen lokal***
+	unsigned char state = ABSCH1;		//aktueller Abschnitt
+	unsigned char state_old;			//für TimeOut return
+	unsigned char neuerAbschnitt = 1;	//1 = neuer Abaschnitt
+	unsigned char absch;				//Anzeige
+	unsigned char rgbFarbe;
+	unsigned char spielLaeuft = 0;
+	unsigned int spielzeit_old;
+	unsigned int toreH = 0;
+	unsigned int toreG = 0;
+	unsigned int zeitStrafeG = 0;
+	unsigned int zeitStrafeH = 0;
+	unsigned char anzPenaltys;
+	
+	//***SUPERLOOP***
     while (1) 
     {
-		flankenerkennung();
-		if (tstStartStopp)
-			startStopp ^= 1;
-		if (tstTorH)
+		if (zehnmilisekunde)
 		{
-			if (strafe2G_aktiv && !strafe5G_aktiv && !(strafe2H_aktiv || strafe5H_aktiv))
-				zeitStrafeG = 0;
-			toreH++;
-		}
-		if (tstTorG)
-		{
-			if (strafe2H_aktiv && !strafe5H_aktiv && !(strafe2G_aktiv || strafe5G_aktiv))
-				zeitStrafeH = 0;
-			toreG++;
-		}
-		if (state == PENALTYS)
-			penaltyschiessen();
-		else
-		{
-			if(tstStrafe2H)
+			flankenerkennung();
+			tasterauswertung(&toreH, &toreG, &zeitStrafeH, &zeitStrafeG, absch, &anzPenaltys);
+			if(tstStartStopp)
+				spielLaeuft ^= 1;
+			if (tstTimeout_pos)
 			{
-				zeitStrafeH = zeitStrafe2;
-				strafe2H_aktiv = 1;
+				state_old = state;
+				state = TIMEOUT;
+				neuerAbschnitt = 1;
 			}
-			if(tstStrafe2G)
+			if(tstStartStopp && neuerAbschnitt)
+			{	
+				neuerAbschnitt = 0;
+				anzTimerInterrupts_pv = 999;
+			}
+			zehnmilisekunde = 0;
+			ausgabe7seg(spielzeit, 0, 1, 0);
+			if (horn_pv)
 			{
-				zeitStrafeG = zeitStrafe2;
-				strafe2G_aktiv = 1;
+				horn_pv--;
+				audHorn_on;
 			}
-			if(tstStrafe5H)
-			{
-				zeitStrafeH = zeitStrafe5;
-				strafe5H_aktiv = 1;
-			}
-			if(tstStrafe5G)
-			{
-				zeitStrafeG = zeitStrafe5;
-				strafe5G_aktiv = 1;
-			}
-		
-		}
-		if(tstTimeout)
-		{
-			state_old = state;
-			zeitSpielzeit_old = zeitSpielzeit;
-			state = TIMEOUT;
-			neuerAbschnitt = 1;
-			startStopp = 1;
+			else
+				audHorn_off;
+			PORTB = rgbFarbe << rgbAusgabe;
 		}
 		
+		//***Zeitberechnungen***
+		if (eineSekunde && (state != PENALTYS) && (state != ENDE))
+		{
+			eineSekunde = 0;
+			if(spielLaeuft)
+				spielzeit = zeitberechnung(spielzeit);
+			elobLcd_clearDisplay();
+			elobLcd_cursor_toXY(1, 0);
+			printf("H:%i", toreH);
+			elobLcd_cursor_toXY(1, 7);
+			printf("%c", absch);
+			elobLcd_cursor_toXY(1, 12);
+			printf("G:%i", toreG);
+			if (zeitStrafeH && (state != PENALTYS) && (state != ENDE))
+			{
+				elobLcd_cursor_toXY(2, 0);
+				if(spielLaeuft && ((state == ABSCH1) || (state == ABSCH2) || (state == ABSCH3) || (state == OT)))
+					zeitStrafeH = zeitberechnung(zeitStrafeH);
+				printf("%i:%i%i", (zeitStrafeH / 100), ((zeitStrafeH / 10) % 10), (zeitStrafeH % 10));
+			}
+			if (zeitStrafeG && (absch != PENALTYS) && (state != ENDE))
+			{
+				elobLcd_cursor_toXY(2, 12);
+				if(spielLaeuft && ((state == ABSCH1) || (state == ABSCH2) || (state == ABSCH3) || (state == OT)))
+					zeitStrafeG = zeitberechnung(zeitStrafeG);
+				printf("%i:%i%i", (zeitStrafeG / 100), ((zeitStrafeG / 10) % 10), (zeitStrafeG % 10));
+			}
+		}
+		
+		//***Statemachine***
 		switch(state)
 		{
 			case ABSCH1:
-				if(neuerAbschnitt)
+				if (neuerAbschnitt)
 				{
-					zeitSpielzeit = zeitAbschnitt;
-					neuerAbschnitt = 0;
+					spielzeit = zeitAbschnitt;
+					spielLaeuft = 0;
 				}
 				absch = '1';
-				if (startStopp)
+				if(spielLaeuft)
 					rgbFarbe = GRUEN;
 				else
 					rgbFarbe = ROT;
-				//Transition
-				if (zeitSpielzeit <= 0)
+				if (endeAbschnitt)
 				{
 					state = PAUSE1;
 					neuerAbschnitt = 1;
-					audHorn_pv = AUD_HORN_LANG_SP;
+					horn_pv = AUD_HORN_LANG_SP;
+					endeAbschnitt = 0;
 				}
 				break;
 				
 			case ABSCH2:
-				if(neuerAbschnitt)
+				if (neuerAbschnitt)
 				{
-					zeitSpielzeit = zeitAbschnitt;
-					neuerAbschnitt = 0;
-					startStopp = 0;
+					spielzeit = zeitAbschnitt;
+					spielLaeuft = 0;
 				}
 				absch = '2';
-				if (startStopp)
-				rgbFarbe = GRUEN;
+				if(spielLaeuft)
+					rgbFarbe = GRUEN;
 				else
-				rgbFarbe = ROT;
-				//Transition
-				if (zeitSpielzeit <= 0)
+					rgbFarbe = ROT;
+				if (endeAbschnitt)
 				{
 					state = PAUSE2;
 					neuerAbschnitt = 1;
-					audHorn_pv = AUD_HORN_LANG_SP;
+					horn_pv = AUD_HORN_LANG_SP;
+					endeAbschnitt = 0;
 				}
 				break;
 				
 			case ABSCH3:
-				if(neuerAbschnitt)
+				if (neuerAbschnitt)
 				{
-					zeitSpielzeit = zeitAbschnitt;
-					neuerAbschnitt = 0;
-					startStopp = 0;
+					spielzeit = zeitAbschnitt;
+					spielLaeuft = 0;
 				}
 				absch = '3';
-				if (startStopp)
-				rgbFarbe = GRUEN;
+				if(spielLaeuft)
+					rgbFarbe = GRUEN;
 				else
-				rgbFarbe = ROT;
-				//Transition
-				if (zeitSpielzeit <= 0)	
+					rgbFarbe = ROT;
+				if (endeAbschnitt)
 				{
-					audHorn_pv = AUD_HORN_LANG_SP;
-					if (toreH == toreG)	//unentschieden
+					if (toreH == toreG)
 						state = PAUSEOT;
-					else //Spielende
+					else
+					{
 						state = ENDE;
+						state_old = ABSCH3;
+					}
 					neuerAbschnitt = 1;
-				}
-				break;
-				
-			case PAUSE1:
-				if (neuerAbschnitt)
-				{
-					zeitSpielzeit = zeitPause;
-					neuerAbschnitt = 0;
-				}
-				absch = '1';
-				rgbFarbe = BLAU;
-				//Transition
-				if (zeitSpielzeit <= 0)
-				{
-					state = ABSCH2;
-					neuerAbschnitt = 1;
-					audHorn_pv = AUD_HORN_KURZ_SP;
-				}
-				break;
-				
-			case PAUSE2:
-				if (neuerAbschnitt)
-				{
-					zeitSpielzeit = zeitPause;
-					neuerAbschnitt = 0;
-				}
-				absch = '2';
-				rgbFarbe = BLAU;
-				//Transition
-				if (zeitSpielzeit <= 0)
-				{
-					state = ABSCH3;
-					neuerAbschnitt = 1;
-					audHorn_pv = AUD_HORN_KURZ_SP;
-				}
-				break;
-				
-			case PAUSEOT:
-				if (neuerAbschnitt)
-				{
-					zeitSpielzeit = zeitPauseOT;
-					neuerAbschnitt = 0;
-				}
-				absch = '3';
-				rgbFarbe = BLAU;
-				//Transition
-				if (zeitSpielzeit <= 0)
-				{
-					state = OT;
-					neuerAbschnitt = 1;
-					audHorn_pv = AUD_HORN_KURZ_SP;
+					horn_pv = AUD_HORN_LANG_SP;
+					endeAbschnitt = 0;
 				}
 				break;
 				
 			case OT:
 				if (neuerAbschnitt)
 				{
-					zeitSpielzeit = zeitOT;
-					neuerAbschnitt = 0;
-					startStopp = 0;
-					torstand_old = toreH + toreG;
+					spielzeit = zeitOT;
+					spielLaeuft = 0;
 				}
 				absch = '+';
-				if (startStopp)
+				if(spielLaeuft)
 				rgbFarbe = GRUEN;
 				else
 				rgbFarbe = ROT;
-				//Transition
-				if(torstand_old < toreH + toreG)
-					state = ENDE;
-				if (zeitSpielzeit <= 0)
+				if (endeAbschnitt || (toreH != toreG))
 				{
-					state = PENALTYS;
+					if (toreH == toreG)
+						state = PENALTYS;
+					else
+					{
+						state = ENDE;
+						state_old = OT;
+					}
 					neuerAbschnitt = 1;
-					audHorn_pv = AUD_HORN_KURZ_SP;
+					horn_pv = AUD_HORN_LANG_SP;
+					endeAbschnitt = 0;
 				}
 				break;
 				
-			case TIMEOUT:
+			case PAUSE1:
 				if(neuerAbschnitt)
 				{
-					zeitSpielzeit = zeitTimeout;
+					spielzeit = zeitPause;
+					spielLaeuft = 1;
 					neuerAbschnitt = 0;
-					rgbFarbe = TUERKIS;
 				}
-				//Transition
-				if (zeitSpielzeit <= 0)
+				rgbFarbe = BLAU;
+				if (endeAbschnitt)
 				{
-					startStopp = 0;
-					audHorn_pv = AUD_HORN_KURZ_SP;
-					zeitSpielzeit = zeitSpielzeit_old;
-					state = state_old;
+					state = ABSCH2;
+					neuerAbschnitt = 1;
+					horn_pv = AUD_HORN_KURZ_SP;
+					endeAbschnitt = 0;
+				}
+				break;
+				
+			case PAUSE2:
+				if(neuerAbschnitt)
+				{
+					spielzeit = zeitPause;
+					spielLaeuft = 1;
+					neuerAbschnitt = 0;
+				}
+				rgbFarbe = BLAU;
+				if (endeAbschnitt)
+				{
+					state = ABSCH3;
+					neuerAbschnitt = 1;
+					horn_pv = AUD_HORN_KURZ_SP;
+					endeAbschnitt = 0;
+				}
+				break;
+				
+			case PAUSEOT:
+				if(neuerAbschnitt)
+				{
+					spielzeit = zeitPauseOT;
+					spielLaeuft = 1;
+					neuerAbschnitt = 0;
+				}
+				rgbFarbe = BLAU;
+				if (endeAbschnitt)
+				{
+					state = OT;
+					neuerAbschnitt = 1;
+					horn_pv = AUD_HORN_KURZ_SP;
+					endeAbschnitt = 0;
 				}
 				break;
 				
 			case PENALTYS:
 				if (neuerAbschnitt)
 				{
-					absch = 'P';
+					absch = 'x';
 					elobLcd_clearDisplay();
-					printf("H:%i \t%c \tG:%i", toreH, absch, toreG);	//obere Zeile
+					elobLcd_cursor_toXY(1, 0);
+					printf("H:%i", toreH);
+					elobLcd_cursor_toXY(1, 7);
+					printf("%c", absch);
+					elobLcd_cursor_toXY(1, 12);
+					printf("G:%i", toreG);
 					neuerAbschnitt = 0;
-					torstand_old = toreH + toreG;
+					spielLaeuft = 0;
+					anzPenaltys = 0;
+					zeitStrafeH = 0;
+					zeitStrafeG = 0;
 				}
-				rgbFarbe = VIOLETT;
-				//Transition
-				if (torstand_old < toreH + toreG)
+				rgbFarbe = WEISS;
+				if (toreH != toreG)
 				{
 					state = ENDE;
+					state_old = PENALTYS;
 					neuerAbschnitt = 1;
 				}
 				break;
 				
 			case ENDE:
-				rgbFarbe = ORANGE;
-				absch = ' ';
-				zeitSpielzeit = 0;
-				startStopp = 0;
 				if (neuerAbschnitt)
 				{
-					neuerAbschnitt = 0;
 					elobLcd_clearDisplay();
-					printf("H:%i \t%c \tG:%i", toreH, absch, toreG);	//obere Zeile
-					zeitSpielzeit = 0;
+					elobLcd_cursor_toXY(1, 0);
+					printf("H:%i", toreH);
+					elobLcd_cursor_toXY(1, 12);
+					printf("G:%i", toreG);
+					neuerAbschnitt = 0;
+					spielLaeuft = 0;
+					spielzeit = 0;
 					zeitStrafeG = 0;
 					zeitStrafeH = 0;
+					if (state_old == OT)
+					{
+						elobLcd_cursor_toXY(1, 7);
+						printf("nV");
+					}
+					if (state_old == PENALTYS)
+					{
+						elobLcd_cursor_toXY(1, 7);
+						printf("nP");
+					}
 				}
-				break;					
-		}
-		
-		//***Sirene***
-		if (audHorn_pv)
-			audHorn_on;
-		else
-			audHorn_off;
+				rgbFarbe = VIOLET;
+				break;
 				
-		if (eineSekunde)
-		{
-			//***Zeitberechnung***
-			if (startStopp)
-			{
-				zeitSpielzeit = zeitberechnung(zeitSpielzeit);
-				if (zeitStrafeH && ((state == ABSCH1) || (state == ABSCH2) || (state == ABSCH3) || (state == OT)))
-					zeitStrafeH = zeitberechnung(zeitStrafeH);
-				if (zeitStrafeG && ((state == ABSCH1) || (state == ABSCH2) || (state == ABSCH3) || (state == OT)))
-					zeitStrafeG = zeitberechnung(zeitStrafeG);
-			}
-			//***Ausgabe Display***
-			if (!(state == PENALTYS))
-			{
-				elobLcd_clearDisplay();
-				printf("H:%i \t%c \tG:%i", toreH, absch, toreG);	//obere Zeile
-				if (zeitStrafeG || zeitStrafeH)
+			case TIMEOUT:
+				if (neuerAbschnitt)
 				{
-					printf("\n");	//untere Zeile
-					if (zeitStrafeH)
-					{
-						unsigned int minuten = zeitStrafeH / 100;
-						unsigned int sekunden = zeitStrafeH - (minuten * 100);
-						printf("%i:%02i", minuten, sekunden);
-					}
-					else
-					{
-						printf("\t\t");
-						strafe2H_aktiv = 0;
-						strafe5H_aktiv = 0;
-					}
-						
-					if (zeitStrafeG)
-					{
-						unsigned int minuten = zeitStrafeG / 100;
-						unsigned int sekunden = zeitStrafeG - (minuten * 100);
-						printf("\t\t\t%i:%02i", minuten, sekunden);
-					}
-					else
-					{
-						strafe2G_aktiv = 0;
-						strafe5G_aktiv = 0;
-					}
+					spielzeit_old = spielzeit;
+					spielzeit = zeitTimeout;
+					spielLaeuft = 1;
+					neuerAbschnitt = 0;
 				}
-			eineSekunde = 0;
-			}
+				rgbFarbe = ORANGE;
+				if (endeAbschnitt)
+				{
+					endeAbschnitt = 0;
+					state = state_old;
+					spielzeit = spielzeit_old;
+					spielLaeuft = 0;
+					horn_pv = AUD_HORN_KURZ_SP;
+				}
+				break;
+				
+			default:
+				break;
 		}
-	rgb(rgbFarbe);	
-	}
+    }
 }
 
+/***********************************************************************
+************************************************************************/
+//***FUNKTIONEN***
 /**
  * Initialisiert PINs
  */
@@ -459,134 +438,173 @@ void timer_init(void)
 	TIMSK2 |= (1<<1);	//Compare Match A Interrupt Enable, OCIE2A
 }
 
-/**
- * Inkremmentiert Zeiten alle eine Sekunde
- */
-int zeitberechnung(unsigned int zeit)
-{
-	if (zeit > 0)
-	{
-		if (!(zeit % 100) && !(zeit % 10))	//X:00
-		{
-			zeit = (zeit - 100 + 60);
-			zeit--;
-		}
-		else
-			zeit--;
-	}
-	else
-		zeit = 0;
-	
-	return zeit;
-}
-
-
-/**
- * RGB-Farbausgabe
- */
-void rgb(unsigned char Farbe)
-{
-	switch(Farbe)
-	{
-		case ROT:
-			rgbRot;
-			break;
-		case ORANGE:
-			rgbOrange;
-			break;
-		case GRUEN:
-			rgbGruen;
-			break;
-		case TUERKIS:
-			rgbTuerkis;
-			break;
-		case BLAU:
-			rgbBlau;
-			break;
-		case VIOLETT:
-			rgbViolett;
-			break;
-		default:
-			rgbDunkel;
-			break;
-	}
-}
-
-/**
- * Sonderanzeige Penaltyschiessen
- */
-void penaltyschiessen(void)
-{
-	static unsigned int anzPenaltys;
-	unsigned int anzPenRunden = anzPenaltys / 2;
-	if(anzPenRunden <= 5)
-	{
-		if(tstStrafe5H)
-		{
-			elobLcd_cursor_toXY(2, anzPenRunden);
-			elobLcd_zeichen('O');
-		}
-		if (tstStrafe5G)
-		{
-			elobLcd_cursor_toXY(2, anzPenRunden);
-			elobLcd_zeichen('X');
-		}
-		if(tstStrafe2H)
-		{
-			elobLcd_cursor_toXY(2, (7+anzPenRunden));
-			elobLcd_zeichen('O');
-		}
-		if(tstStrafe2G)
-		{
-			elobLcd_cursor_toXY(2, (7+anzPenRunden));
-			elobLcd_zeichen('X');
-		}
-	}
-	if(anzPenaltys > 8)
-	{
-		if (!(anzPenaltys % 2) && (tstStrafe2G||tstStrafe2H||tstStrafe5G||tstStrafe5H))
-		{
-			elobLcd_clearDisplay();
-			printf("H:%i \t%c \tG:%i", toreH, absch, toreG);	//obere Zeile
-			elobLcd_cursor_2Line();
-		}
-		
-		if(tstStrafe5H)
-		{
-			elobLcd_cursor_toXY(2, 0);
-			elobLcd_zeichen('O');
-		}
-		if (tstStrafe5G)
-		{
-			elobLcd_cursor_toXY(2, 0);
-			elobLcd_zeichen('X');
-		}
-		if(tstStrafe2H)
-		{
-			elobLcd_cursor_toXY(2, 8);
-			elobLcd_zeichen('O');
-		}
-		if(tstStrafe2G)
-		{
-			elobLcd_cursor_toXY(2, 8);
-			elobLcd_zeichen('X');
-		}
-	}
-	
-	if(tstStrafe2G||tstStrafe2H||tstStrafe5G||tstStrafe5H)
-		anzPenaltys++;
-}
-
-/**
- * Flankenerkennung
- */
 void flankenerkennung(void)
 {
 	pinj.state = PINJ;
 	pinj.flanke_pos = pinj.state & ~pinj.state_old;
 	pinj.flanke_neg = ~pinj.state & pinj.state_old;
 	pinj.state_old = pinj.state;
+}
+
+/**
+ * @param:	zeit_old:		spielzeit bevor funktion
+ * @return: neue Spielzeit:	zeit_old - 1
+ */
+int zeitberechnung(int zeit_old)
+{
+	unsigned int zeit_neu = 0;
+	unsigned int sekunden;
+	unsigned int zSekunden;
+	unsigned int minuten;
+	unsigned int zMinuten;
 	
-	if (pinj.flanke_pos)
-		tasterblock = 30;	//30ms
+	sekunden = zeit_old % 10;
+	zeit_old /= 10;
+	zSekunden = zeit_old % 10;
+	zeit_old /= 10;
+	minuten = zeit_old % 10;
+	zeit_old /= 10;
+	zMinuten = zeit_old % 10;
+	
+	if (sekunden || zSekunden || minuten || zMinuten)
+	{
+		if (sekunden)
+			sekunden--; 
+		else 
+		{
+			sekunden = 9;
+			if (zSekunden)
+				zSekunden--; 
+			else
+			{
+				zSekunden = 5;
+				if (minuten)
+					minuten--; 
+				else
+				{
+					minuten = 9;
+					if (zMinuten)
+					{
+						zMinuten--;
+					}
+				}
+			}
+		}
+	}
+	else
+		endeAbschnitt = 1;
+	
+	zeit_neu = zMinuten * 1000;
+	zeit_neu += minuten * 100;
+	zeit_neu += zSekunden * 10;
+	zeit_neu += sekunden;
+	
+	return zeit_neu;
+}
+
+/**
+ * setzt/löscht Werte von, Toren und Strafen
+ * @param: pointer Tore H
+ * @param: pointer Tore G
+ * @param: pointer Strafzeit H
+ * @param: pointer Strafzeit G
+ * @param: pointer dritel
+ * @param: pointer anzPenaltys
+ */
+void tasterauswertung(int* toreH, int* toreG, int* zeitStrafeH, int* zeitStrafeG, unsigned char drittel, unsigned char* anzPen)
+{
+	//*** Variablen Status taster***
+	static unsigned int counter_tst_T_H;
+	static unsigned int counter_tst_T_G;
+	static unsigned int counter_tst_2_H;
+	static unsigned int counter_tst_2_G;
+	static unsigned int counter_tst_5_H;
+	static unsigned int counter_tst_5_G;
+	
+	//***Counters***
+	if(counter_tst_T_H && counter_tst_T_H < delay)
+		counter_tst_T_H++;
+	if(counter_tst_T_G && counter_tst_T_G < delay)
+		counter_tst_T_G++;
+	if(counter_tst_2_H && counter_tst_2_H < delay)
+		counter_tst_2_H++;
+	if(counter_tst_2_G && counter_tst_2_G < delay)
+		counter_tst_2_G++;
+	if(counter_tst_5_H && counter_tst_5_H < delay)
+		counter_tst_5_H++;
+	if(counter_tst_5_G && counter_tst_5_G < delay)
+		counter_tst_5_G++;
+	
+	//***Tore H***
+	if(tstTorH_pos)
+		counter_tst_T_H = 1;
+	if(tstTorH_neg)
+	{
+		if (counter_tst_T_H >= (delay - 1))
+			(*toreH)--;
+		else
+			(*toreH)++;
+		counter_tst_T_H = 0;
+	}
+		
+	//***Tore G***
+	if(tstTorG__pos)
+		counter_tst_T_G = 1;
+	if(tstTorG_neg)
+	{
+		if (counter_tst_T_G >= (delay - 1))
+			(*toreG)--;
+		else
+			(*toreG)++;
+		counter_tst_T_G = 0;
+	}
+	
+	//***Strafen***
+	if (drittel != PENALTYS)
+	{
+		//**Strafe 2 H**
+		if(tstStrafe2H_pos)
+			counter_tst_2_H = 1;
+		if(tstStrafe2H_neg)
+		{
+			if (counter_tst_2_H >= (delay - 1))
+				*zeitStrafeH = 0;
+			else
+				*zeitStrafeH = zeitStrafe2;
+			counter_tst_2_H = 0;
+		}
+		//**Strafe 2 G**
+		if(tstStrafe2G_pos)
+			counter_tst_2_G = 1;
+		if(tstStrafe2G_neg)
+		{
+			if (counter_tst_2_G >= (delay - 1))
+				*zeitStrafeG = 0;
+			else
+				*zeitStrafeG = zeitStrafe2;
+			counter_tst_2_G = 0;
+		}
+		//**Strafe 5 H**
+		if(tstStrafe5H_pos)
+			counter_tst_5_H = 1;
+		if(tstStrafe5H_neg)
+		{
+			if (counter_tst_5_H >= (delay - 1))
+				*zeitStrafeH = 0;
+			else
+				*zeitStrafeH = zeitStrafe5;
+			counter_tst_5_H = 0;
+		}
+		//**Strafe 5 G**
+		if(tstStrafe5G_pos)
+			counter_tst_5_G = 1;
+		if(tstStrafe5G_neg)
+		{
+			if (counter_tst_5_G >= (delay - 1))
+				*zeitStrafeG = 0;
+			else
+				*zeitStrafeG = zeitStrafe5;
+			counter_tst_5_G = 0;
+		}
+	}
 }

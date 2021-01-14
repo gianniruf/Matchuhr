@@ -152,9 +152,10 @@ void lcdPutch(char zeichen)
 /**
  * Instruktionsbefehle
  */
-void elobLcd_cursorHome(void)
+void elobLcd_cursor_home(void)
 {
 	elobLcd_instruktion(0x02);
+	_delay_ms(1.7);
 }
 void elobLcd_clearDisplay(void)
 {
@@ -215,7 +216,7 @@ void elobLcd_cursor_toXY(unsigned char line, unsigned char position)
 	int i;
 	
 	if(line == 1)
-		elobLcd_cursorHome();
+		elobLcd_cursor_home();
 	if(line == 2)
 		elobLcd_cursor_2Line();
 	for (i = position; i > 0; i--)

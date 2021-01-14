@@ -56,9 +56,16 @@ void ausgabe7seg(int zahl, unsigned char hKom, unsigned char DoppP, unsigned cha
 	en7seg_off;
 	
 	static unsigned char stelle;
+	static unsigned char anzStellen;
+	
+	//entferung des vordersten Null
+	if(zahl < 1000)
+		anzStellen = 3;
+	else
+		anzStellen = 4;	
 	
 	stelle++;
-	if (stelle >= 4)
+	if (stelle >= anzStellen)
 	{
 		stelle = 0;
 	}
