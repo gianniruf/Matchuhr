@@ -4,7 +4,7 @@ a gameclock for sport. Designed for floorball (swiss unihockey rules)
 # NOT READY TO USE YET!!!
 
 ## Display
-Gametime			4x7-Seg
+Gametime			4x7-Seg <br>
 Goals (Points)		LCD
 Penalty-Time		LCD (one for both Teams)
 Period				LCD
